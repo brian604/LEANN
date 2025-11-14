@@ -199,6 +199,7 @@ def compute_embeddings(
     manual_tokenize: bool = False,
     max_length: int = 512,
     provider_options: Optional[dict[str, Any]] = None,
+    gpu_id: Optional[int] = None,
 ) -> np.ndarray:
     """
     Unified embedding computation entry point
@@ -210,6 +211,7 @@ def compute_embeddings(
         is_build: Whether this is a build operation (shows progress bar)
         batch_size: Batch size for processing
         adaptive_optimization: Whether to use adaptive optimization based on batch size
+        gpu_id: Specific GPU ID to use (0, 1, 2, ...). If None, uses LEANN_GPU_ID env var or auto-detect
 
     Returns:
         Normalized embeddings array, shape: (len(texts), embedding_dim)
@@ -225,6 +227,7 @@ def compute_embeddings(
             adaptive_optimization=adaptive_optimization,
             manual_tokenize=manual_tokenize,
             max_length=max_length,
+            gpu_id=gpu_id,
         )
     elif mode == "openai":
         return compute_embeddings_openai(
@@ -258,6 +261,7 @@ def compute_embeddings_sentence_transformers(
     adaptive_optimization: bool = True,
     manual_tokenize: bool = False,
     max_length: int = 512,
+    gpu_id: Optional[int] = None,
 ) -> np.ndarray:
     """
     Compute embeddings using SentenceTransformer with model caching and adaptive optimization
@@ -270,6 +274,7 @@ def compute_embeddings_sentence_transformers(
         batch_size: Batch size for processing
         is_build: Whether this is a build operation (shows progress bar)
         adaptive_optimization: Whether to use adaptive optimization based on batch size
+        gpu_id: Specific GPU ID to use (0, 1, 2, ...). If None, uses LEANN_GPU_ID env var or auto-detect
     """
     # Handle empty input
     if not texts:
@@ -287,6 +292,38 @@ def compute_embeddings_sentence_transformers(
         else:
             device = "cpu"
 
+    # Apply GPU ID selection (supports both explicit parameter and environment variable)
+    if device == "cuda" or device.startswith("cuda:"):
+        # Check environment variable if gpu_id not explicitly provided
+        if gpu_id is None:
+            env_gpu_id = os.getenv("LEANN_GPU_ID")
+            if env_gpu_id is not None:
+                try:
+                    gpu_id = int(env_gpu_id)
+                    logger.info(f"Using GPU ID from LEANN_GPU_ID environment variable: {gpu_id}")
+                except ValueError:
+                    logger.warning(
+                        f"Invalid LEANN_GPU_ID value '{env_gpu_id}', ignoring and using default GPU"
+                    )
+
+        # Apply GPU ID if specified
+        if gpu_id is not None:
+            device = f"cuda:{gpu_id}"
+            logger.info(f"Using specific GPU: {device}")
+
+            # Validate GPU ID
+            if torch.cuda.is_available():
+                num_gpus = torch.cuda.device_count()
+                if gpu_id >= num_gpus:
+                    raise ValueError(
+                        f"GPU ID {gpu_id} is invalid. Available GPUs: 0-{num_gpus - 1} "
+                        f"(total: {num_gpus})"
+                    )
+                logger.info(
+                    f"GPU {gpu_id} selected: {torch.cuda.get_device_name(gpu_id)} "
+                    f"({torch.cuda.get_device_properties(gpu_id).total_memory / 1e9:.1f} GB)"
+                )
+
     # Apply optimizations based on benchmark results
     if adaptive_optimization:
         # Use optimal batch_size constants for different devices based on benchmark results
@@ -294,11 +331,11 @@ def compute_embeddings_sentence_transformers(
             batch_size = 128  # MPS optimal batch size from benchmark
             if model_name == "Qwen/Qwen3-Embedding-0.6B":
                 batch_size = 32
-        elif device == "cuda":
+        elif device.startswith("cuda"):
             batch_size = 256  # CUDA optimal batch size
         # Keep original batch_size for CPU
 
-    # Create cache key
+    # Create cache key (include device to differentiate between different GPUs)
     cache_key = f"sentence_transformers_{model_name}_{device}_{use_fp16}_optimized"
 
     # Check if model is already cached
@@ -312,13 +349,18 @@ def compute_embeddings_sentence_transformers(
         logger.info(f"Using device: {device}")
 
         # Apply hardware optimizations
-        if device == "cuda":
+        if device.startswith("cuda"):
             # TODO: Haven't tested this yet
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
-            torch.cuda.set_per_process_memory_fraction(0.9)
+            # Set memory fraction for the specific GPU if using cuda:X format
+            if ":" in device:
+                gpu_idx = int(device.split(":")[1])
+                torch.cuda.set_per_process_memory_fraction(0.9, device=gpu_idx)
+            else:
+                torch.cuda.set_per_process_memory_fraction(0.9)
         elif device == "mps":
             try:
                 if hasattr(torch.mps, "set_per_process_memory_fraction"):
@@ -417,7 +459,7 @@ def compute_embeddings_sentence_transformers(
                     raise
 
         # Apply additional optimizations based on mode
-        if use_fp16 and device in ["cuda", "mps"]:
+        if use_fp16 and (device.startswith("cuda") or device == "mps"):
             try:
                 model = model.half()
                 logger.info(f"Applied FP16 precision: {model_name}")
@@ -425,7 +467,7 @@ def compute_embeddings_sentence_transformers(
                 logger.warning(f"FP16 optimization failed: {e}")
 
         # Apply torch.compile optimization
-        if device in ["cuda", "mps"]:
+        if device.startswith("cuda") or device == "mps":
             try:
                 model = torch.compile(model, mode="reduce-overhead", dynamic=True)
                 logger.info(f"Applied torch.compile optimization: {model_name}")
@@ -481,12 +523,14 @@ def compute_embeddings_sentence_transformers(
         else:
             logger.info("Loading HF tokenizer/model for manual tokenization path")
             hf_tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            torch_dtype = torch.float16 if (use_fp16 and device == "cuda") else torch.float32
+            torch_dtype = (
+                torch.float16 if (use_fp16 and device.startswith("cuda")) else torch.float32
+            )
             hf_model = AutoModel.from_pretrained(model_name, torch_dtype=torch_dtype)
             hf_model.to(device)
             hf_model.eval()
             # Optional compile on supported devices
-            if device in ["cuda", "mps"]:
+            if device.startswith("cuda") or device == "mps":
                 try:
                     hf_model = torch.compile(hf_model, mode="reduce-overhead", dynamic=True)  # type: ignore
                 except Exception:

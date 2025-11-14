@@ -700,7 +700,41 @@ claude mcp list | cat
 - `TOKENIZERS_PARALLELISM=false` - Disable tokenizer parallelism
 - `HF_HUB_DISABLE_SYMLINKS=1` - Disable symlinks (Windows compatibility)
 
-### 6.2 Backend Configuration
+**GPU Selection:**
+- `LEANN_GPU_ID` - Specific GPU ID to use for embedding computation (0, 1, 2, ...)
+
+### 6.2 GPU Selection (Multi-GPU Systems)
+
+LEANN supports specifying which GPU to use for embedding computation on multi-GPU systems.
+
+**Method 1: Command-Line**
+```bash
+# Use GPU 0
+leann build docs --docs ./data/ --gpu-id 0
+
+# Use GPU 1
+leann search docs "query" --gpu-id 1
+```
+
+**Method 2: Environment Variable**
+```bash
+export LEANN_GPU_ID=1
+leann build docs --docs ./data/  # Uses GPU 1
+```
+
+**Method 3: Python API**
+```python
+builder = LeannBuilder(backend_name="hnsw", gpu_id=0)
+searcher = LeannSearcher("index.leann", gpu_id=1)
+chat = LeannChat("index.leann", gpu_id=2)
+```
+
+**GPU Selection Priority:**
+1. Explicit `gpu_id` parameter or `--gpu-id` flag
+2. `LEANN_GPU_ID` environment variable
+3. Auto-detection (first available GPU or MPS on Apple Silicon)
+
+### 6.3 Backend Configuration
 
 **HNSW Parameters:**
 ```python

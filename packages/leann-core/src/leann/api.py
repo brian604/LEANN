@@ -43,6 +43,7 @@ def compute_embeddings(
     port: Optional[int] = None,
     is_build=False,
     provider_options: Optional[dict[str, Any]] = None,
+    gpu_id: Optional[int] = None,
 ) -> np.ndarray:
     """
     Computes embeddings using different backends.
@@ -56,6 +57,7 @@ def compute_embeddings(
             - "openai": Use OpenAI embedding API
             - "gemini": Use Google Gemini embedding API
         use_server: Whether to use embedding server (True for search, False for build)
+        gpu_id: Specific GPU ID to use (0, 1, 2, ...). Only for direct computation
 
     Returns:
         numpy array of embeddings
@@ -77,6 +79,7 @@ def compute_embeddings(
             mode=mode,
             is_build=is_build,
             provider_options=provider_options,
+            gpu_id=gpu_id,
         )
 
 
@@ -284,9 +287,11 @@ class LeannBuilder:
         dimensions: Optional[int] = None,
         embedding_mode: str = "sentence-transformers",
         embedding_options: Optional[dict[str, Any]] = None,
+        gpu_id: Optional[int] = None,
         **backend_kwargs,
     ):
         self.backend_name = backend_name
+        self.gpu_id = gpu_id
         # Normalize incompatible combinations early (for consistent metadata)
         if backend_name == "hnsw":
             is_recompute = backend_kwargs.get("is_recompute", True)
@@ -455,6 +460,7 @@ class LeannBuilder:
             use_server=False,
             is_build=True,
             provider_options=self.embedding_options,
+            gpu_id=self.gpu_id,
         )
         string_ids = [chunk["id"] for chunk in self.chunks]
         # Persist ID map alongside index so backends that return integer labels can remap to passage IDs
@@ -711,6 +717,7 @@ class LeannBuilder:
             use_server=False,
             is_build=True,
             provider_options=self.embedding_options,
+            gpu_id=self.gpu_id,
         )
 
         embedding_dim = embeddings.shape[1]
@@ -864,11 +871,18 @@ class LeannBuilder:
 
 
 class LeannSearcher:
-    def __init__(self, index_path: str, enable_warmup: bool = False, **backend_kwargs):
+    def __init__(
+        self,
+        index_path: str,
+        enable_warmup: bool = False,
+        gpu_id: Optional[int] = None,
+        **backend_kwargs,
+    ):
         # Fix path resolution for Colab and other environments
         if not Path(index_path).is_absolute():
             index_path = str(Path(index_path).resolve())
 
+        self.gpu_id = gpu_id
         self.meta_path_str = f"{index_path}.meta.json"
         if not Path(self.meta_path_str).exists():
             parent_dir = Path(index_path).parent
@@ -897,6 +911,8 @@ class LeannSearcher:
             raise ValueError(f"Backend '{backend_name}' not found.")
         final_kwargs = {**self.meta_data.get("backend_kwargs", {}), **backend_kwargs}
         final_kwargs["enable_warmup"] = enable_warmup
+        if self.gpu_id is not None:
+            final_kwargs["gpu_id"] = self.gpu_id
         if self.embedding_options:
             final_kwargs.setdefault("embedding_options", self.embedding_options)
         self.backend_impl: LeannBackendSearcherInterface = backend_factory.searcher(
@@ -1183,11 +1199,14 @@ class LeannChat:
         index_path: str,
         llm_config: Optional[dict[str, Any]] = None,
         enable_warmup: bool = False,
+        gpu_id: Optional[int] = None,
         searcher: Optional[LeannSearcher] = None,
         **kwargs,
     ):
         if searcher is None:
-            self.searcher = LeannSearcher(index_path, enable_warmup=enable_warmup, **kwargs)
+            self.searcher = LeannSearcher(
+                index_path, enable_warmup=enable_warmup, gpu_id=gpu_id, **kwargs
+            )
             self._owns_searcher = True
         else:
             self.searcher = searcher

@@ -158,6 +158,129 @@ builder.build_index("./indexes/my-notes", chunks)
 
 `embedding_options` is persisted to the index `meta.json`, so subsequent `LeannSearcher` or `LeannChat` sessions automatically reuse the same provider settings (the embedding server manager forwards them to the provider for you).
 
+## GPU Selection for Multi-GPU Systems
+
+If you have multiple GPUs available, LEANN allows you to specify which GPU to use for embedding computation. This is useful for:
+- **Load balancing**: Distribute different LEANN processes across multiple GPUs
+- **Resource sharing**: Reserve specific GPUs for different workloads
+- **Development**: Test on different GPUs without changing code
+
+### Method 1: Command-Line Flag
+
+Use the `--gpu-id` flag to specify which GPU to use:
+
+```bash
+# Build index using GPU 0
+leann build docs --docs ./data/ --gpu-id 0
+
+# Build index using GPU 1
+leann build docs2 --docs ./data2/ --gpu-id 1
+
+# Search using GPU 2
+leann search docs "query" --gpu-id 2
+
+# Ask using GPU 3
+leann ask docs "question" --gpu-id 3
+```
+
+### Method 2: Environment Variable
+
+Set the `LEANN_GPU_ID` environment variable to specify a default GPU for all LEANN operations:
+
+```bash
+# Set GPU for current session
+export LEANN_GPU_ID=1
+
+# Now all LEANN operations use GPU 1
+leann build docs --docs ./data/
+leann search docs "query"
+leann ask docs "question"
+```
+
+### Method 3: Python API
+
+Specify GPU ID programmatically when using the Python API:
+
+```python
+from leann import LeannBuilder, LeannSearcher, LeannChat
+
+# Build with specific GPU
+builder = LeannBuilder(
+    backend_name="hnsw",
+    embedding_model="facebook/contriever",
+    gpu_id=0  # Use GPU 0
+)
+builder.add_text("Sample text")
+builder.build_index("my_index.leann")
+
+# Search with specific GPU
+searcher = LeannSearcher("my_index.leann", gpu_id=1)
+results = searcher.search("query")
+
+# Chat with specific GPU
+chat = LeannChat("my_index.leann", gpu_id=2)
+response = chat.ask("question")
+```
+
+### Checking Available GPUs
+
+To see which GPUs are available on your system:
+
+```python
+import torch
+
+if torch.cuda.is_available():
+    num_gpus = torch.cuda.device_count()
+    print(f"Available GPUs: {num_gpus}")
+
+    for i in range(num_gpus):
+        props = torch.cuda.get_device_properties(i)
+        print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
+        print(f"  Memory: {props.total_memory / 1e9:.1f} GB")
+else:
+    print("No CUDA GPUs available")
+```
+
+### Priority and Fallback
+
+GPU selection follows this priority order:
+1. **Explicit parameter**: `gpu_id` parameter in API or `--gpu-id` CLI flag
+2. **Environment variable**: `LEANN_GPU_ID`
+3. **Auto-detection**: Automatically selects first available GPU (cuda:0) or MPS on Apple Silicon
+
+If you specify an invalid GPU ID, LEANN will raise a helpful error message listing available GPUs.
+
+### Multi-GPU Use Cases
+
+**Scenario 1: Parallel Index Building**
+```bash
+# Terminal 1: Build first index on GPU 0
+LEANN_GPU_ID=0 leann build index1 --docs ./data1/
+
+# Terminal 2: Build second index on GPU 1 simultaneously
+LEANN_GPU_ID=1 leann build index2 --docs ./data2/
+```
+
+**Scenario 2: Development vs Production**
+```bash
+# Development on GPU 0
+leann build dev-index --docs ./test-data/ --gpu-id 0
+
+# Production on GPU 1 (higher memory GPU)
+leann build prod-index --docs ./prod-data/ --gpu-id 1
+```
+
+**Scenario 3: Shared Server**
+```bash
+# User 1 uses GPU 0
+export LEANN_GPU_ID=0
+
+# User 2 uses GPU 1
+export LEANN_GPU_ID=1
+```
+
+**Note**: This is Tier 1 support (simple GPU selection). For more advanced multi-GPU features like data parallelism across all GPUs, see the roadmap or submit a feature request.
+
 ## Index Selection: Matching Your Scale
 
 ### HNSW (Hierarchical Navigable Small World)

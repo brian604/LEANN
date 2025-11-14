@@ -145,6 +145,12 @@ Examples:
             help="API key for embedding service (defaults to OPENAI_API_KEY)",
         )
         build_parser.add_argument(
+            "--gpu-id",
+            type=int,
+            default=None,
+            help="GPU ID to use for embedding computation (0, 1, 2, ...). Uses LEANN_GPU_ID env var or auto-detect if not specified",
+        )
+        build_parser.add_argument(
             "--force", "-f", action="store_true", help="Force rebuild existing index"
         )
         build_parser.add_argument(
@@ -260,6 +266,12 @@ Examples:
             action="store_true",
             help="Display file paths and metadata in search results",
         )
+        search_parser.add_argument(
+            "--gpu-id",
+            type=int,
+            default=None,
+            help="GPU ID to use for embedding computation (0, 1, 2, ...). Uses LEANN_GPU_ID env var or auto-detect if not specified",
+        )
 
         # Ask command
         ask_parser = subparsers.add_parser("ask", help="Ask questions")
@@ -324,6 +336,12 @@ Examples:
             type=str,
             default=None,
             help="API key for OpenAI-compatible APIs (defaults to OPENAI_API_KEY)",
+        )
+        ask_parser.add_argument(
+            "--gpu-id",
+            type=int,
+            default=None,
+            help="GPU ID to use for embedding computation (0, 1, 2, ...). Uses LEANN_GPU_ID env var or auto-detect if not specified",
         )
 
         # List command
@@ -1404,6 +1422,7 @@ Examples:
             embedding_model=args.embedding_model,
             embedding_mode=args.embedding_mode,
             embedding_options=embedding_options or None,
+            gpu_id=args.gpu_id,
             graph_degree=args.graph_degree,
             complexity=args.complexity,
             is_compact=args.compact,
@@ -1519,7 +1538,7 @@ Examples:
                         print("Invalid input. Aborting search.")
                         return
 
-        searcher = LeannSearcher(index_path=index_path)
+        searcher = LeannSearcher(index_path=index_path, gpu_id=args.gpu_id)
         results = searcher.search(
             query,
             top_k=args.top_k,
@@ -1576,7 +1595,7 @@ Examples:
             if resolved_api_key:
                 llm_config["api_key"] = resolved_api_key
 
-        chat = LeannChat(index_path=index_path, llm_config=llm_config)
+        chat = LeannChat(index_path=index_path, llm_config=llm_config, gpu_id=args.gpu_id)
 
         llm_kwargs: dict[str, Any] = {}
         if args.thinking_budget:
