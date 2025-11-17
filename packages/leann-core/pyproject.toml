@@ -45,6 +45,10 @@ colab = [
     "transformers>=4.30.0,<4.46",  # 4.46.0 switches to PEP 604 typing (int | None), breaks Py3.9
     "accelerate>=0.20.0,<1.0.0",  # Limit accelerate version
 ]
+extract = [
+    "contextgem>=0.3.0",  # Structured data extraction from documents
+    "litellm>=1.0.0",  # LLM provider abstraction (transitively from contextgem)
+]
 
 [project.scripts]
 leann = "leann.cli:main"

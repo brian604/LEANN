@@ -18,4 +18,17 @@ from .registry import BACKEND_REGISTRY, autodiscover_backends
 
 autodiscover_backends()
 
+# Conditional import for extraction (requires contextgem)
+_extraction_available = False
+try:
+    from .extraction import LeannExtractor
+
+    _extraction_available = True
+except ImportError:
+    # ContextGem not installed - extraction features unavailable
+    LeannExtractor = None  # type: ignore
+
 __all__ = ["BACKEND_REGISTRY", "LeannBuilder", "LeannChat", "LeannSearcher"]
+
+if _extraction_available:
+    __all__.append("LeannExtractor")
