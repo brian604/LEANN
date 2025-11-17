@@ -43,6 +43,7 @@ LEANN/
 │   │       ├── cli.py                # CLI implementation (1658 lines)
 │   │       ├── mcp.py                # MCP server for Claude Code integration
 │   │       ├── chat.py               # LLM integration (OpenAI, Ollama, HF)
+│   │       ├── extraction.py         # ContextGem integration for structured extraction (469 lines)
 │   │       ├── embedding_compute.py  # Embedding computation (1122 lines)
 │   │       ├── embedding_server_manager.py # Server lifecycle management
 │   │       ├── chunking_utils.py     # Text chunking utilities
@@ -95,6 +96,7 @@ LEANN/
 ├── docs/                 # Documentation
 │   ├── CONTRIBUTING.md            # Contribution guidelines
 │   ├── configuration-guide.md     # Configuration best practices
+│   ├── extraction_guide.md        # Structured data extraction guide
 │   ├── metadata_filtering.md      # Metadata filtering guide
 │   ├── grep_search.md             # Grep search feature
 │   ├── ast_chunking_guide.md      # AST chunking documentation
@@ -108,6 +110,14 @@ LEANN/
 │   ├── mcp_integration_demo.py    # MCP integration example
 │   ├── grep_search_example.py     # Grep search example
 │   ├── mlx_demo.py                # MLX backend example (Apple Silicon)
+│   ├── extraction_demo.py         # Extraction feature demo
+│   ├── rag_extraction_example.py  # RAG app extraction examples
+│   ├── extraction_schemas/        # Pre-built extraction schemas
+│   │   ├── research_paper.json    # Academic paper extraction
+│   │   ├── company_earnings.json  # Financial metrics extraction
+│   │   ├── contract_terms.json    # Legal contract extraction
+│   │   ├── technical_doc.json     # Technical documentation extraction
+│   │   └── README.md              # Schema usage guide
 │   └── *.py                       # Other examples
 │
 ├── scripts/              # Build and release automation
@@ -269,6 +279,64 @@ class LeannChat:
 - Membership: `in`, `not_in`
 - String: `contains`, `starts_with`, `ends_with`
 - Boolean: `is_true`, `is_false`
+
+#### Structured Extraction (`packages/leann-core/src/leann/extraction.py`)
+**Purpose:** Combine LEANN search with ContextGem for structured data extraction
+
+**Key Classes:**
+```python
+class LeannExtractor:
+    """Two-stage workflow: Search → Extract → Structure"""
+    - search_and_extract(query, concepts, top_k=5) -> dict
+    - extract_from_results(results, concepts) -> list[dict]
+    - cleanup()  # Shutdown background servers
+```
+
+**Workflow:**
+1. **Search:** LEANN semantic search retrieves relevant documents
+2. **Extract:** ContextGem LLM extracts structured information
+3. **Structure:** Returns JSON with values, references, justifications
+
+**Supported Concepts:**
+- `StringConcept` - Free-form text extraction (e.g., "KeyFinding", "Methodology")
+- `JsonObjectConcept` - Schema-validated structured data (e.g., financial metrics)
+
+**LLM Support:**
+- OpenAI (GPT-4o, GPT-4o-mini)
+- Ollama (local models for privacy)
+- Anthropic (via LiteLLM)
+
+**Optional Dependency:**
+```bash
+pip install leann[extract]  # Installs contextgem>=0.3.0, litellm>=1.0.0
+```
+
+**Example:**
+```python
+from leann import LeannExtractor
+from contextgem import StringConcept
+
+extractor = LeannExtractor("my_index.leann")
+concepts = [
+    StringConcept("Finding", "Main research finding"),
+    StringConcept("Method", "Research methodology used"),
+]
+result = extractor.search_and_extract("machine learning", concepts, top_k=5)
+# Returns: {search_results: [...], extractions: [...], total_tokens: ..., total_cost: ...}
+```
+
+**RAG App Integration:**
+All RAG apps support extraction via CLI flags:
+```bash
+python -m apps.document_rag --query "..." --extract \
+  --extract-schema examples/extraction_schemas/research_paper.json
+```
+
+**Pre-Built Schemas:**
+- `research_paper.json` - Academic papers (5 concepts)
+- `company_earnings.json` - Financial metrics (9 fields)
+- `contract_terms.json` - Legal contracts (8 fields)
+- `technical_doc.json` - Technical docs (6 concepts)
 
 ### 2.3 Backend Architecture
 

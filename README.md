@@ -177,11 +177,21 @@ results = searcher.search("fantastical AI-generated creatures", top_k=1)
 # Chat with your data
 chat = LeannChat(INDEX_PATH, llm_config={"type": "hf", "model": "Qwen/Qwen3-0.6B"})
 response = chat.ask("How much storage does LEANN save?", top_k=1)
+
+# Extract structured data (requires: pip install leann[extract])
+from leann import LeannExtractor
+from contextgem import StringConcept
+
+extractor = LeannExtractor(INDEX_PATH)
+concepts = [StringConcept("StorageSavings", "Percentage of storage reduction")]
+result = extractor.search_and_extract("storage savings", concepts, top_k=1)
 ```
 
 ## RAG on Everything!
 
 LEANN supports RAG on various data sources including documents (`.pdf`, `.txt`, `.md`), Apple Mail, Google Search History, WeChat, ChatGPT conversations, Claude conversations, iMessage conversations, and **live data from any platform through MCP (Model Context Protocol) servers** - including Slack, Twitter, and more.
+
+**🆕 Structured Data Extraction:** Combine LEANN's semantic search with [ContextGem](https://deepwiki.com/shcherbak-ai/contextgem) to extract structured information from your documents. Extract key findings from research papers, financial metrics from earnings reports, or terms from legal contracts. [Learn more →](docs/extraction_guide.md)
 
 
 
