@@ -1,0 +1,26 @@
+[
+  {
+    "name": "APIs",
+    "description": "API endpoints, methods, and their descriptions"
+  },
+  {
+    "name": "Configuration",
+    "description": "Configuration parameters and environment variables"
+  },
+  {
+    "name": "Dependencies",
+    "description": "Required dependencies, libraries, and versions"
+  },
+  {
+    "name": "Installation",
+    "description": "Installation steps and requirements"
+  },
+  {
+    "name": "Examples",
+    "description": "Usage examples and code snippets"
+  },
+  {
+    "name": "Troubleshooting",
+    "description": "Common issues and their solutions"
+  }
+]

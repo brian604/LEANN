@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Methodologies",
+    "description": "Research methodologies and experimental designs used in the paper"
+  },
+  {
+    "name": "KeyFindings",
+    "description": "Main research findings and contributions"
+  },
+  {
+    "name": "Datasets",
+    "description": "Datasets used for experiments and evaluation"
+  },
+  {
+    "name": "Limitations",
+    "description": "Acknowledged limitations of the research"
+  },
+  {
+    "name": "FutureWork",
+    "description": "Suggested directions for future research"
+  }
+]

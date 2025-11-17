@@ -1,0 +1,49 @@
+{
+  "type": "json",
+  "name": "CompanyMetrics",
+  "description": "Company financial performance metrics from earnings reports",
+  "schema": {
+    "company_name": {
+      "type": "string",
+      "description": "Name of the company"
+    },
+    "quarter": {
+      "type": "string",
+      "description": "Fiscal quarter (e.g., Q3 2024)"
+    },
+    "revenue": {
+      "type": "string",
+      "description": "Total revenue figure"
+    },
+    "revenue_growth": {
+      "type": "string",
+      "description": "Revenue growth percentage"
+    },
+    "net_income": {
+      "type": "string",
+      "description": "Net income figure"
+    },
+    "eps": {
+      "type": "string",
+      "description": "Earnings per share"
+    },
+    "key_products": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Key products or services mentioned"
+    },
+    "guidance": {
+      "type": "string",
+      "description": "Forward guidance or outlook"
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Risk factors mentioned"
+    }
+  }
+}

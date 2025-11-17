@@ -246,6 +246,45 @@ class BaseRAGExample(ABC):
             help="Disable embedding recomputation",
         )
 
+        # Extraction parameters (optional, requires contextgem)
+        extraction_group = parser.add_argument_group("Extraction Parameters (requires leann[extract])")
+        extraction_group.add_argument(
+            "--extract",
+            action="store_true",
+            help="Enable structured data extraction from search results",
+        )
+        extraction_group.add_argument(
+            "--extract-concepts",
+            nargs="+",
+            metavar="NAME:DESCRIPTION",
+            help="Concepts to extract (format: 'Companies:Company names mentioned'). Can specify multiple.",
+        )
+        extraction_group.add_argument(
+            "--extract-schema",
+            type=str,
+            help="JSON file containing extraction schema definition",
+        )
+        extraction_group.add_argument(
+            "--extract-combine",
+            action="store_true",
+            help="Combine all search results for holistic extraction",
+        )
+        extraction_group.add_argument(
+            "--extract-no-references",
+            action="store_true",
+            help="Disable sentence-level references in extractions",
+        )
+        extraction_group.add_argument(
+            "--extract-no-justifications",
+            action="store_true",
+            help="Disable LLM justifications for extractions",
+        )
+        extraction_group.add_argument(
+            "--extract-output",
+            type=str,
+            help="Save extraction results to JSON file",
+        )
+
         # Add source-specific parameters
         self._add_specific_arguments(parser)
 
@@ -359,8 +398,184 @@ class BaseRAGExample(ABC):
 
         session.run_interactive_loop(handle_query)
 
+    def _parse_extraction_concepts(self, args):
+        """Parse extraction concepts from CLI arguments."""
+        # Check if extraction is available
+        try:
+            from contextgem import JsonObjectConcept, StringConcept
+        except ImportError:
+            print("⚠️  ContextGem not installed. Install with: uv pip install leann-core[extract]")
+            return None
+
+        import json
+
+        concepts = []
+
+        # Parse concepts from --extract-concepts
+        if args.extract_concepts:
+            for concept_str in args.extract_concepts:
+                if ":" in concept_str:
+                    name, description = concept_str.split(":", 1)
+                else:
+                    name, description = concept_str, concept_str
+
+                concepts.append(
+                    StringConcept(
+                        name=name.strip(),
+                        description=description.strip(),
+                    )
+                )
+
+        # Load schema from file if provided
+        if args.extract_schema:
+            try:
+                with open(args.extract_schema) as f:
+                    schema_data = json.load(f)
+
+                # Support multiple formats
+                if isinstance(schema_data, list):
+                    # List of concepts
+                    for item in schema_data:
+                        if item.get("type") == "json":
+                            concepts.append(
+                                JsonObjectConcept(
+                                    name=item["name"],
+                                    description=item["description"],
+                                    json_schema=item["schema"],
+                                )
+                            )
+                        else:
+                            concepts.append(
+                                StringConcept(
+                                    name=item["name"],
+                                    description=item["description"],
+                                )
+                            )
+                elif isinstance(schema_data, dict):
+                    # Single concept
+                    if schema_data.get("type") == "json":
+                        concepts.append(
+                            JsonObjectConcept(
+                                name=schema_data["name"],
+                                description=schema_data["description"],
+                                json_schema=schema_data["schema"],
+                            )
+                        )
+                    else:
+                        concepts.append(
+                            StringConcept(
+                                name=schema_data["name"],
+                                description=schema_data["description"],
+                            )
+                        )
+            except Exception as e:
+                print(f"⚠️  Failed to load extraction schema: {e}")
+                return None
+
+        return concepts if concepts else None
+
+    async def run_extraction(self, args, index_path: str, query: str):
+        """Run extraction on search results."""
+        # Check if LeannExtractor is available
+        try:
+            from leann import LeannExtractor
+        except (ImportError, AttributeError):
+            print("⚠️  LeannExtractor not available. Install with: uv pip install leann-core[extract]")
+            return
+
+        # Parse extraction concepts
+        concepts = self._parse_extraction_concepts(args)
+        if not concepts:
+            print("⚠️  No extraction concepts specified. Use --extract-concepts or --extract-schema")
+            return
+
+        print(f"\n[Extraction Query]: \033[36m{query}\033[0m")
+        print(f"[Extracting]: {len(concepts)} concept(s)")
+
+        # Create extractor
+        extractor = LeannExtractor(
+            index_path,
+            llm_config=self.get_llm_config(args),
+        )
+
+        # Run extraction
+        result = extractor.search_and_extract(
+            query=query,
+            concepts=concepts,
+            top_k=args.top_k,
+            complexity=args.search_complexity,
+            add_references=not args.extract_no_references,
+            add_justifications=not args.extract_no_justifications,
+            combine_documents=args.extract_combine,
+        )
+
+        # Display results
+        print(f"\n[Extraction Results]:")
+        print(f"  Documents found: {len(result['search_results'])}")
+        print(f"  Tokens used: {result['total_tokens']:,}")
+        print(f"  Cost: ${result['total_cost']:.4f}")
+
+        # Display extracted data
+        print(f"\n[Extracted Data]:")
+        extractions = result["extractions"]
+        if isinstance(extractions, dict):
+            # Combined extraction
+            self._display_extraction(extractions, "Combined Analysis")
+        else:
+            # Per-document extraction
+            for i, extraction in enumerate(extractions, 1):
+                source_info = f"Document {i}"
+                if "source" in extraction:
+                    score = extraction["source"]["score"]
+                    source_info += f" (score: {score:.3f})"
+                self._display_extraction(extraction, source_info)
+
+        # Save to file if requested
+        if args.extract_output:
+            import json
+
+            with open(args.extract_output, "w") as f:
+                # Convert to serializable format
+                output = {
+                    "query": query,
+                    "metadata": result["metadata"],
+                    "extractions": extractions,
+                    "total_tokens": result["total_tokens"],
+                    "total_cost": result["total_cost"],
+                }
+                json.dump(output, f, indent=2, default=str)
+            print(f"\n💾 Saved extraction results to: {args.extract_output}")
+
+        extractor.cleanup()
+
+    def _display_extraction(self, extraction: dict, header: str):
+        """Display a single extraction result."""
+        print(f"\n  {header}:")
+        for concept_name, items in extraction["concepts"].items():
+            print(f"    {concept_name}:")
+            for item in items:
+                value = item["value"]
+                # Format based on type
+                if isinstance(value, dict):
+                    print(f"      - {value}")
+                elif isinstance(value, list):
+                    for v in value:
+                        print(f"      - {v}")
+                else:
+                    print(f"      - {value}")
+
+                # Show justification if available
+                if item.get("justification"):
+                    print(f"        Reason: {item['justification']}")
+
     async def run_single_query(self, args, index_path: str, query: str):
         """Run a single query against the index."""
+        # Check if extraction mode is enabled
+        if args.extract:
+            await self.run_extraction(args, index_path, query)
+            return
+
+        # Regular chat mode
         chat = LeannChat(
             index_path,
             llm_config=self.get_llm_config(args),

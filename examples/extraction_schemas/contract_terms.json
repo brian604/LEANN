@@ -1,0 +1,59 @@
+{
+  "type": "json",
+  "name": "ContractTerms",
+  "description": "Key contractual terms and obligations",
+  "schema": {
+    "parties": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Parties involved in the contract"
+    },
+    "effective_date": {
+      "type": "string",
+      "description": "Contract effective date"
+    },
+    "termination_date": {
+      "type": "string",
+      "description": "Contract termination or expiry date"
+    },
+    "contract_value": {
+      "type": "string",
+      "description": "Total contract value or payment amount"
+    },
+    "payment_terms": {
+      "type": "object",
+      "description": "Payment terms and schedule",
+      "properties": {
+        "amount": {
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        }
+      }
+    },
+    "obligations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Key obligations of each party"
+    },
+    "termination_clauses": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Conditions for contract termination"
+    },
+    "confidentiality": {
+      "type": "string",
+      "description": "Confidentiality and NDA terms"
+    }
+  }
+}
