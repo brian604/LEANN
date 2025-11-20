@@ -59,6 +59,8 @@ dependencies = [
     "torchvision>=0.23.0",
     "einops",
     "seaborn",
+    # ContextGem for LLM-based document extraction
+    "contextgem>=0.1.0",
 ]
 
 [project.optional-dependencies]
